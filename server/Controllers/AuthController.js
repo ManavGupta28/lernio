@@ -6,51 +6,29 @@ const multer = require("multer");
 const cloudinary = require("cloudinary");
 
 dotenv.config();
-
+ 
 const router = express.Router();
 
-// Setup Multer for file uploads
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+var upload = multer({
+    storage: storage
 });
 
-// Signup Route
 const signup = async (req, res) => {
     try {
-        const { firstName, lastName, userBio, userEmail, userMobile, userName, userPassword, profileImage } = req.body;
-
-        // Validation
-        if (!firstName || !lastName || !userBio || !userEmail || !userMobile || !userName || !userPassword) {
-            return res.status(400).send("All fields are required.");
-        }
-
-        // Check if user already exists
+        const { firstName, lastName, userBio, userEmail, userMobile, userName } = req.body;
         const existingUser = await User.findOne({ 
             $or: [{ userEmail }, { userMobile }] 
         });
 
         if (existingUser) {
-            return res.status(409).send("User already exists with this email or username. Please log in.");
+            return res.status(401).send("User already exists with this email or username. Please log in.");
         }
-
-        // Hash the password
+        const password = req.body.userPassword;
         const saltRounds = 10;
         const salt = await bcrypt.genSalt(saltRounds);
-        const encryptedPassword = await bcrypt.hash(userPassword, salt);
-
-        // Upload profile image to Cloudinary if it exists
-        let profileImageUrl;
-        if (profileImage) {
-            const result = await cloudinary.uploader.upload(profileImage, { resource_type: "auto" });
-            profileImageUrl = result.secure_url;
-        }
-
-        // Create and save new user
+        const encryptedPassword = await bcrypt.hash(password, salt);
+        console.log("Request Body: ", req.body);
         const newUser = new User({
             firstName,
             lastName,
@@ -59,34 +37,25 @@ const signup = async (req, res) => {
             userMobile,
             userName,
             userPassword: encryptedPassword,
-            profileImage: profileImageUrl,
+            profileImage: result.secure_url
         });
-
         await newUser.save();
 
-        return res.status(201).json({
-            status: "Success",
+        return res.status(200).json({
+            status: "Ok",
             user: newUser
         });
 
     } catch (error) {
-        return res.status(500).json({
-            status: "Error",
-            message: "An unexpected error occurred.",
-            error: error.message,
-        });
+        res.status(400).json({ error: error.message });
+        console.log(error);
     }
 };
 
-// Login Route
+
 const login = async (req, res) => {
     try {
         const { userEmail, userPassword } = req.body;
-
-        // Validation
-        if (!userEmail || !userPassword) {
-            return res.status(400).send("Email and password are required.");
-        }
 
         const user = await User.findOne({ userEmail });
 
@@ -96,8 +65,8 @@ const login = async (req, res) => {
                 message: "User does not exist. Please sign up first.",
             });
         }
+        
 
-        // Verify password
         const passwordMatch = await bcrypt.compare(userPassword, user.userPassword);
 
         if (!passwordMatch) {
@@ -120,5 +89,7 @@ const login = async (req, res) => {
         });
     }
 };
+
+
 
 module.exports = { signup, login };
